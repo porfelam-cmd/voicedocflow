@@ -1,1 +1,5 @@
 .DS_Store
+1_rec/
+*.gdoc
+*.gsheet
+.claude/settings.local.json
