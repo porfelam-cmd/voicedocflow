@@ -329,6 +329,51 @@
     .result-icon.error { background: #FEF2F2; }
 
     /* ===== Animations ===== */
+    /* ===== Upload ===== */
+    .upload-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0 16px;
+      color: #9CA3AF;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .upload-divider::before,
+    .upload-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .upload-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      min-height: 48px;
+    }
+    .upload-btn:hover { border-color: var(--primary); background: #F9FAFB; }
+
+    .upload-hint {
+      text-align: center;
+      font-size: 11px;
+      color: #9CA3AF;
+      margin-top: 8px;
+    }
+
     @keyframes fadein {
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -400,6 +445,18 @@
         </button>
       </div>
       <div class="record-hint" id="record-hint">タップして録音開始</div>
+
+      <div class="upload-divider">または</div>
+      <input type="file" id="audio-file-input" accept="audio/*" style="display:none">
+      <label class="upload-btn" for="audio-file-input">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 16 12 12 8 16"/>
+          <line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+        音声ファイルをアップロード
+      </label>
+      <div class="upload-hint">MP3・M4A・WAV・WebM等に対応</div>
     </div>
 
     <!-- Panel 2: Processing -->
@@ -727,6 +784,52 @@ function callGAS(audioData, mimeType) {
     return res.json();
   });
 }
+
+// ============================================================
+// ファイルアップロード処理
+// ============================================================
+document.getElementById('audio-file-input').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  e.target.value = ''; // 同じファイルを再選択できるようにリセット
+
+  var mimeType = file.type || 'audio/mpeg';
+
+  showPanel('process');
+  setStep('upload', 'active');
+  setStep('ai',     '');
+  setStep('save',   '');
+  setBadge('処理中', 'processing');
+
+  var reader = new FileReader();
+  reader.onload = function() {
+    var base64 = reader.result.split(',')[1];
+    setStep('upload', 'done');
+    setStep('ai', 'active');
+
+    callGAS(base64, mimeType).then(function(result) {
+      if (!result.success) throw new Error(result.error || '処理に失敗しました');
+      setStep('ai',   'done');
+      setStep('save', 'active');
+      return new Promise(function(resolve) { setTimeout(resolve, 800); }).then(function() {
+        setStep('save', 'done');
+        return new Promise(function(resolve) { setTimeout(resolve, 400); }).then(function() {
+          return result;
+        });
+      });
+    }).then(function(result) {
+      document.getElementById('doc-link').href = result.docUrl;
+      showPanel('complete');
+      setBadge('完了', 'done');
+    }).catch(function(err) {
+      showError(err.message || 'エラーが発生しました。もう一度お試しください。');
+    });
+  };
+  reader.onerror = function() {
+    showError('ファイルの読み込みに失敗しました。もう一度お試しください。');
+  };
+  reader.readAsDataURL(file);
+});
 
 // ============================================================
 // エラー表示 / リセット

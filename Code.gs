@@ -2,10 +2,11 @@
 // VoiceDoc Flow — Code.gs
 // ============================================================
 // スクリプトプロパティ（GASエディタで設定）:
-//   GEMINI_API_KEY   : Google AI Studio APIキー
-//   RECIPIENT_EMAIL  : 議事録送信先メールアドレス
-//   DRIVE_FOLDER_ID  : 議事録保存先DriveフォルダID
-//   APP_PASSWORD     : パスワードゲート認証用パスワード
+//   GEMINI_API_KEY      : Google AI Studio APIキー
+//   RECIPIENT_EMAIL     : 議事録送信先メールアドレス
+//   DRIVE_FOLDER_ID     : 議事録保存先DriveフォルダID（2_doc）
+//   DRIVE_REC_FOLDER_ID : 録音保存先DriveフォルダID（1_rec）
+//   APP_PASSWORD        : パスワードゲート認証用パスワード
 // ============================================================
 
 // ------------------------------------------------------------
@@ -57,24 +58,50 @@ function handleProcess(body) {
   const geminiKey      = props.getProperty('GEMINI_API_KEY');
   const recipientEmail = props.getProperty('RECIPIENT_EMAIL');
   const driveFolderId  = props.getProperty('DRIVE_FOLDER_ID');
+  const recFolderId    = props.getProperty('DRIVE_REC_FOLDER_ID');
 
   // 1. 議事録生成（インラインデータで直接送信）
   const minutes = generateMinutes(audioData, mimeType, geminiKey);
 
-  // 2. Google ドキュメントに保存
+  // 2. 録音ファイルを 1_rec に保存
+  if (recFolderId) {
+    saveAudioToDrive(audioData, mimeType, minutes, recFolderId);
+  }
+
+  // 3. Google ドキュメントを 2_doc に保存
   const docUrl = saveToDoc(minutes, driveFolderId);
 
-  // 3. Gmail 送信
+  // 4. Gmail 送信
   sendEmail(minutes, docUrl, recipientEmail);
 
   return jsonResponse({ success: true, docUrl: docUrl });
 }
 
 // ============================================================
+// Drive — 録音ファイル保存（1_rec）
+// ============================================================
+function saveAudioToDrive(audioData, mimeType, minutes, recFolderId) {
+  const now     = new Date();
+  const dateStr = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyyMMdd_HHmm');
+  const company = minutes.company || '不明';
+  const topic   = minutes.topic   || '録音';
+
+  var ext = '.webm';
+  if (mimeType.indexOf('ogg') !== -1) ext = '.ogg';
+  else if (mimeType.indexOf('mp4') !== -1) ext = '.mp4';
+
+  const fileName   = '[' + dateStr + ']_' + company + '_' + topic + ext;
+  const audioBytes = Utilities.base64Decode(audioData);
+  const blob       = Utilities.newBlob(audioBytes, mimeType, fileName);
+
+  DriveApp.getFolderById(recFolderId).createFile(blob);
+}
+
+// ============================================================
 // Gemini — 議事録生成（インラインデータ）
 // ============================================================
 function generateMinutes(audioData, mimeType, geminiKey) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=' + geminiKey;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + geminiKey;
 
   const prompt = [
     'あなたは工作機械販売業界の会議の議事録作成の専門家です。',
@@ -89,12 +116,10 @@ function generateMinutes(audioData, mimeType, geminiKey) {
     '  "title": "会議タイトル（15字以内）",',
     '  "company": "会社名",',
     '  "topic": "議題キーワード（10字以内・記号なし）",',
-    '  "datetime": "推定日時",',
     '  "participants": ["参加者名"],',
     '  "decisions": ["決定事項"],',
     '  "actions": [{ "item": "タスク内容", "assignee": "担当者", "deadline": "期限" }],',
-    '  "summary": "構造化されたサマリー（日本語・詳細）",',
-    '  "transcript": "全文書き起こし（日本語）"',
+    '  "summary": "構造化されたサマリー（日本語・詳細）"',
     '}'
   ].join('\n');
 
@@ -139,6 +164,12 @@ function saveToDoc(minutes, driveFolderId) {
   const topic   = minutes.topic   || '議事録';
   const fileName = '[' + dateStr + ']_' + company + '_' + topic;
 
+  const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+  const dayOfWeek  = DAY_NAMES[now.getDay()];
+  const datetimeStr = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy年MM月dd日') +
+                      '（' + dayOfWeek + '） ' +
+                      Utilities.formatDate(now, 'Asia/Tokyo', 'HH:mm');
+
   const doc  = DocumentApp.create(fileName);
   const body = doc.getBody();
 
@@ -146,29 +177,29 @@ function saveToDoc(minutes, driveFolderId) {
   body.appendParagraph(minutes.title || fileName)
     .setHeading(DocumentApp.ParagraphHeading.HEADING1);
 
-  // H2: Basic Info
-  body.appendParagraph('Basic Info')
+  // H2: 基本情報
+  body.appendParagraph('基本情報')
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  body.appendParagraph('日時: ' + (minutes.datetime || '不明'));
+  body.appendParagraph('日時: ' + datetimeStr);
   body.appendParagraph('参加者: ' + (minutes.participants || []).join('、'));
 
-  // H2: Decisions
-  body.appendParagraph('Decisions')
+  // H2: 決定事項
+  body.appendParagraph('決定事項')
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   (minutes.decisions || []).forEach(function(d) {
     body.appendListItem(d).setGlyphType(DocumentApp.GlyphType.BULLET);
   });
 
-  // H2: Next Actions
-  body.appendParagraph('Next Actions')
+  // H2: 今後の対応
+  body.appendParagraph('今後の対応')
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   const actions = minutes.actions || [];
   if (actions.length > 0) {
     const table  = body.appendTable();
     const header = table.appendTableRow();
-    header.appendTableCell('Task');
-    header.appendTableCell('Assignee');
-    header.appendTableCell('Deadline');
+    header.appendTableCell('タスク');
+    header.appendTableCell('担当者');
+    header.appendTableCell('期限');
     actions.forEach(function(a) {
       const row = table.appendTableRow();
       row.appendTableCell(a.item     || '');
@@ -177,15 +208,10 @@ function saveToDoc(minutes, driveFolderId) {
     });
   }
 
-  // H2: Summary
-  body.appendParagraph('Summary')
+  // H2: 要約
+  body.appendParagraph('要約')
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   body.appendParagraph(minutes.summary || '');
-
-  // H2: Full Transcript
-  body.appendParagraph('Full Transcript')
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  body.appendParagraph(minutes.transcript || '');
 
   doc.saveAndClose();
 
