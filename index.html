@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html translate="no" lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="google" content="notranslate">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>VoiceDoc Flow</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary : #111827;
+      --hover   : #000000;
+      --bg      : #F5F4EF;
+      --success : #059669;
+      --error   : #DC2626;
+      --border  : #D1D5DB;
+      --font    : -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Password Gate ===== */
+    #screen-gate {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #111827, #000000);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      overflow: hidden;
+    }
+
+    #maze-canvas {
+      position: absolute;
+      inset: 0;
+      opacity: 0.18;
+    }
+
+    .gate-box {
+      position: relative;
+      background: white;
+      border-radius: 24px;
+      padding: 40px 32px;
+      width: min(360px, calc(100vw - 48px));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      animation: fadein 0.4s ease both;
+    }
+
+    .logo-wrap {
+      position: relative;
+      width: 72px;
+      height: 72px;
+    }
+    .logo-outer {
+      position: absolute;
+      inset: 0;
+      border: 2px solid var(--primary);
+      border-radius: 14px;
+    }
+    .logo-inner {
+      position: absolute;
+      inset: 7px;
+      border: 2px solid var(--primary);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gate-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.3px;
+    }
+
+    #password-input {
+      width: 100%;
+      height: 52px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 0 16px;
+      font-size: 16px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.2s;
+      color: var(--primary);
+      background: white;
+    }
+    #password-input:focus { border-color: var(--primary); }
+
+    #login-btn {
+      width: 100%;
+      height: 52px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #login-btn:hover  { background: var(--hover); }
+    #login-btn:active { transform: scale(0.98); }
+
+    .gate-error {
+      font-size: 13px;
+      color: var(--error);
+      text-align: center;
+      min-height: 18px;
+    }
+
+    /* ===== Main App ===== */
+    #screen-app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--primary);
+      color: white;
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 100px;
+      border: 1px solid rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.3s;
+    }
+    .status-badge.recording  { border-color: var(--error);   color: var(--error); }
+    .status-badge.processing { border-color: #9CA3AF; color: #9CA3AF; }
+    .status-badge.done       { border-color: var(--success); color: var(--success); }
+
+    main {
+      flex: 1;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 24px;
+      border: 1px solid var(--border);
+      animation: fadein 0.3s ease both;
+    }
+
+    /* ===== Panel 1: Recording ===== */
+    .timer {
+      text-align: center;
+      font-size: 52px;
+      font-weight: 200;
+      letter-spacing: 4px;
+      color: var(--primary);
+      margin-bottom: 32px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .record-btn-wrap { display: flex; justify-content: center; }
+
+    .record-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: none;
+      background: var(--primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: background 0.2s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .record-btn:hover  { background: var(--hover); }
+    .record-btn:active { transform: scale(0.95); }
+
+    .record-btn.recording { background: var(--error); }
+    .record-btn.recording::before {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      border: 2px solid var(--error);
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
+
+    .record-hint {
+      text-align: center;
+      font-size: 13px;
+      color: #9CA3AF;
+      margin-top: 20px;
+    }
+
+    /* ===== Panel 2: Processing ===== */
+    .steps { display: flex; flex-direction: column; gap: 20px; }
+
+    .step { display: flex; align-items: center; gap: 14px; }
+
+    .step-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.3s;
+      color: #9CA3AF;
+    }
+    .step-icon.active { border-color: var(--primary); color: var(--primary); }
+    .step-icon.done   { background: var(--primary); border-color: var(--primary); color: white; }
+
+    .step-label { font-size: 14px; color: #9CA3AF; transition: color 0.3s; }
+    .step-label.active { color: var(--primary); font-weight: 600; }
+    .step-label.done   { color: var(--primary); }
+
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ===== Panel 3: Complete ===== */
+    .result-icon {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .result-icon.success { background: #F0FDF4; }
+
+    .result-title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .result-subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #6B7280;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .primary-btn {
+      display: block;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      text-align: center;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    .primary-btn:hover { background: var(--hover); }
+
+    .secondary-btn {
+      display: block;
+      width: 100%;
+      background: transparent;
+      color: #6B7280;
+      border: 1.5px solid var(--border);
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-family: var(--font);
+      cursor: pointer;
+      margin-top: 12px;
+      transition: border-color 0.2s, color 0.2s;
+      text-align: center;
+      text-decoration: none;
+    }
+    .secondary-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* ===== Panel 4: Error ===== */
+    .result-icon.error { background: #FEF2F2; }
+
+    /* ===== Animations ===== */
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse-ring {
+      0%   { transform: scale(1);   opacity: 0.8; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- Password Gate                                                 -->
+<!-- ============================================================ -->
+<div id="screen-gate">
+  <canvas id="maze-canvas"></canvas>
+  <div class="gate-box">
+    <div class="logo-wrap">
+      <div class="logo-outer"></div>
+      <div class="logo-inner">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8"  y1="22" x2="16" y2="22"/>
+        </svg>
+      </div>
+    </div>
+    <div class="gate-title">VoiceDoc Flow</div>
+    <input
+      type="password"
+      id="password-input"
+      placeholder="パスワード"
+      autocomplete="current-password"
+    />
+    <button id="login-btn">ログイン</button>
+    <div class="gate-error" id="gate-error"></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Main App                                                      -->
+<!-- ============================================================ -->
+<div id="screen-app" style="display:none">
+  <header>
+    <span class="header-title">VoiceDoc Flow</span>
+    <span class="status-badge" id="status-badge">待機中</span>
+  </header>
+  <main>
+
+    <!-- Panel 1: Recording -->
+    <div class="panel" id="panel-record">
+      <div class="timer" id="timer">00:00</div>
+      <div class="record-btn-wrap">
+        <button class="record-btn" id="record-btn" aria-label="録音開始・停止">
+          <svg id="icon-mic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+            <line x1="8"  y1="22" x2="16" y2="22"/>
+          </svg>
+          <svg id="icon-stop" width="26" height="26" viewBox="0 0 24 24" fill="white" style="display:none">
+            <rect x="4" y="4" width="16" height="16" rx="3"/>
+          </svg>
+        </button>
+      </div>
+      <div class="record-hint" id="record-hint">タップして録音開始</div>
+    </div>
+
+    <!-- Panel 2: Processing -->
+    <div class="panel" id="panel-process" style="display:none">
+      <div class="steps">
+        <div class="step">
+          <div class="step-icon" id="step-icon-upload">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+          </div>
+          <span class="step-label" id="step-label-upload">音声をアップロード中</span>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-icon-ai">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+            </svg>
+          </div>
+          <span class="step-label" id="step-label-ai">AI が議事録を生成中</span>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-icon-save">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+          </div>
+          <span class="step-label" id="step-label-save">Docs 保存 &amp; メール送信</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Complete -->
+    <div class="panel" id="panel-complete" style="display:none">
+      <div class="result-icon success">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="result-title">議事録が完成しました</div>
+      <div class="result-subtitle">Google Docs に保存し、<br>メールを送信しました</div>
+      <a id="doc-link" href="#" target="_blank" rel="noopener" class="primary-btn">
+        Google Docs で開く →
+      </a>
+      <button class="secondary-btn" id="restart-btn">新しい録音を始める</button>
+    </div>
+
+    <!-- Panel 4: Error -->
+    <div class="panel" id="panel-error" style="display:none">
+      <div class="result-icon error">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8"  x2="12"    y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+      <div class="result-title">エラーが発生しました</div>
+      <div class="result-subtitle" id="error-message">もう一度お試しください。</div>
+      <button class="primary-btn" id="retry-btn">やり直す</button>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ============================================================
+// 設定（GASにコピーする際に正しい値に変更すること）
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwfNjW_5RpJ_0_dTj-uoa4gCCAjZoNR4rMvBKS0OyA1ud-Qzqv4uegTPoPkgr7EUo8g/exec';
+
+// ============================================================
+// 迷路背景生成（反復DFS）
+// ============================================================
+(function() {
+  var canvas = document.getElementById('maze-canvas');
+  var ctx    = canvas.getContext('2d');
+  var CELL   = 28;
+
+  function draw() {
+    var W = window.innerWidth, H = window.innerHeight;
+    canvas.width = W; canvas.height = H;
+    var cols = Math.ceil(W / CELL) + 1;
+    var rows = Math.ceil(H / CELL) + 1;
+    var total = cols * rows;
+    var visited = new Uint8Array(total);
+    var walls   = new Uint8Array(total).fill(0xF); // bit0=N bit1=E bit2=S bit3=W
+
+    var idx = function(c, r) { return r * cols + c; };
+    // [dc, dr, wallOfCurrent, wallOfNeighbor]
+    var DIRS = [[0,-1,0,2],[1,0,1,3],[0,1,2,0],[-1,0,3,1]];
+    var stack = [[0, 0]];
+    visited[idx(0, 0)] = 1;
+
+    while (stack.length) {
+      var cur = stack[stack.length - 1];
+      var cc = cur[0], cr = cur[1];
+      var nbrs = DIRS.filter(function(d) {
+        var nc = cc + d[0], nr = cr + d[1];
+        return nc >= 0 && nc < cols && nr >= 0 && nr < rows && !visited[idx(nc, nr)];
+      });
+      if (!nbrs.length) { stack.pop(); continue; }
+      var d  = nbrs[Math.floor(Math.random() * nbrs.length)];
+      var nc = cc + d[0], nr = cr + d[1];
+      walls[idx(cc, cr)] &= ~(1 << d[2]);
+      walls[idx(nc, nr)] &= ~(1 << d[3]);
+      visited[idx(nc, nr)] = 1;
+      stack.push([nc, nr]);
+    }
+
+    ctx.strokeStyle = '#C4C2B7';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var w = walls[idx(c, r)];
+        var x = c * CELL, y = r * CELL;
+        if (w & 1) { ctx.moveTo(x, y);        ctx.lineTo(x + CELL, y); }
+        if (w & 2) { ctx.moveTo(x + CELL, y); ctx.lineTo(x + CELL, y + CELL); }
+      }
+    }
+    ctx.stroke();
+  }
+
+  draw();
+  window.addEventListener('resize', draw);
+})();
+
+// ============================================================
+// State
+// ============================================================
+var mediaRecorder   = null;
+var audioChunks     = [];
+var recordingMime   = '';
+var timerInterval   = null;
+var elapsedSeconds  = 0;
+var enteredPassword = '';
+
+// ============================================================
+// UI helpers
+// ============================================================
+function showPanel(name) {
+  ['record', 'process', 'complete', 'error'].forEach(function(n) {
+    document.getElementById('panel-' + n).style.display = (n === name) ? '' : 'none';
+  });
+}
+
+function setBadge(text, cls) {
+  var b = document.getElementById('status-badge');
+  b.textContent = text;
+  b.className   = 'status-badge' + (cls ? ' ' + cls : '');
+}
+
+var STEP_ICONS = {
+  upload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>',
+  ai:     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>',
+  save:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+};
+var CHECK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+function setStep(name, state) {
+  var icon  = document.getElementById('step-icon-'  + name);
+  var label = document.getElementById('step-label-' + name);
+  icon.className  = 'step-icon'  + (state ? ' ' + state : '');
+  label.className = 'step-label' + (state ? ' ' + state : '');
+  if      (state === 'active') { icon.innerHTML = '<div class="spinner"></div>'; }
+  else if (state === 'done')   { icon.innerHTML = CHECK_ICON; }
+  else                         { icon.innerHTML = STEP_ICONS[name] || ''; }
+}
+
+// ============================================================
+// Password Gate
+// ============================================================
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('password-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+function doLogin() {
+  var pw = document.getElementById('password-input').value.trim();
+  if (!pw) return;
+  enteredPassword = pw;
+  document.getElementById('screen-gate').style.display = 'none';
+  document.getElementById('screen-app').style.display  = 'flex';
+}
+
+// ============================================================
+// Recording
+// ============================================================
+document.getElementById('record-btn').addEventListener('click', toggleRecording);
+
+function toggleRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
+function startRecording() {
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    var mimeTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+    ];
+    recordingMime = mimeTypes.find(function(m) {
+      return MediaRecorder.isTypeSupported(m);
+    }) || '';
+
+    mediaRecorder = new MediaRecorder(stream, recordingMime ? { mimeType: recordingMime, audioBitsPerSecond: 32000 } : {});
+    audioChunks   = [];
+
+    mediaRecorder.addEventListener('dataavailable', function(e) {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    });
+    mediaRecorder.addEventListener('stop', onRecordingStop);
+    mediaRecorder.start(1000);
+
+    // UI
+    document.getElementById('record-btn').classList.add('recording');
+    document.getElementById('icon-mic').style.display  = 'none';
+    document.getElementById('icon-stop').style.display = '';
+    document.getElementById('record-hint').textContent = 'タップして録音停止';
+    setBadge('REC', 'recording');
+
+    elapsedSeconds = 0;
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+
+  }).catch(function() {
+    showError('マイクへのアクセスが許可されていません。\nブラウザの設定を確認してください。');
+  });
+}
+
+function stopRecording() {
+  if (!mediaRecorder) return;
+  mediaRecorder.stop();
+  mediaRecorder.stream.getTracks().forEach(function(t) { t.stop(); });
+  clearInterval(timerInterval);
+
+  document.getElementById('record-btn').classList.remove('recording');
+  document.getElementById('icon-mic').style.display  = '';
+  document.getElementById('icon-stop').style.display = 'none';
+  document.getElementById('record-hint').textContent = 'タップして録音開始';
+  setBadge('処理中', 'processing');
+}
+
+function updateTimer() {
+  elapsedSeconds++;
+  var m = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+  var s = String(elapsedSeconds % 60).padStart(2, '0');
+  document.getElementById('timer').textContent = m + ':' + s;
+}
+
+// ============================================================
+// 録音停止後の処理フロー
+// ============================================================
+function onRecordingStop() {
+  var mimeType = recordingMime || 'audio/webm';
+  var blob     = new Blob(audioChunks, { type: mimeType });
+
+  showPanel('process');
+  setStep('upload', 'active');
+  setStep('ai',     '');
+  setStep('save',   '');
+
+  // Blob を base64 に変換して GAS へ送信（Gemini File API の CORS 問題を回避）
+  var reader = new FileReader();
+  reader.onload = function() {
+    var base64 = reader.result.split(',')[1];
+
+    setStep('upload', 'done');
+    setStep('ai', 'active');
+
+    callGAS(base64, mimeType).then(function(result) {
+      if (!result.success) throw new Error(result.error || '処理に失敗しました');
+
+      setStep('ai',   'done');
+      setStep('save', 'active');
+
+      return new Promise(function(resolve) { setTimeout(resolve, 800); }).then(function() {
+        setStep('save', 'done');
+        return new Promise(function(resolve) { setTimeout(resolve, 400); }).then(function() {
+          return result;
+        });
+      });
+
+    }).then(function(result) {
+      document.getElementById('doc-link').href = result.docUrl;
+      showPanel('complete');
+      setBadge('完了', 'done');
+
+    }).catch(function(err) {
+      showError(err.message || 'エラーが発生しました。もう一度お試しください。');
+    });
+  };
+  reader.onerror = function() {
+    showError('音声データの変換に失敗しました。もう一度お試しください。');
+  };
+  reader.readAsDataURL(blob);
+}
+
+// ============================================================
+// GAS 呼び出し（音声データを base64 で送信）
+// ============================================================
+function callGAS(audioData, mimeType) {
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action:    'process',
+      password:  enteredPassword,
+      audioData: audioData,
+      mimeType:  mimeType,
+    }),
+    redirect: 'follow',
+  }).then(function(res) {
+    if (!res.ok) throw new Error('サーバーとの通信に失敗しました: ' + res.status);
+    return res.json();
+  });
+}
+
+// ============================================================
+// エラー表示 / リセット
+// ============================================================
+function showError(message) {
+  document.getElementById('error-message').textContent = message;
+  showPanel('error');
+  setBadge('エラー', '');
+}
+
+document.getElementById('retry-btn').addEventListener('click',   resetToRecord);
+document.getElementById('restart-btn').addEventListener('click', resetToRecord);
+
+function resetToRecord() {
+  mediaRecorder  = null;
+  audioChunks    = [];
+  elapsedSeconds = 0;
+  document.getElementById('timer').textContent = '00:00';
+  setStep('upload', '');
+  setStep('ai',     '');
+  setStep('save',   '');
+  showPanel('record');
+  setBadge('待機中', '');
+}
+</script>
+</body>
+</html>
