@@ -87,8 +87,11 @@ function saveAudioToDrive(audioData, mimeType, minutes, recFolderId) {
   const topic   = minutes.topic   || '録音';
 
   var ext = '.webm';
-  if (mimeType.indexOf('ogg') !== -1) ext = '.ogg';
-  else if (mimeType.indexOf('mp4') !== -1) ext = '.mp4';
+  if      (mimeType.indexOf('mp3')  !== -1) ext = '.mp3';
+  else if (mimeType.indexOf('mp4')  !== -1) ext = '.mp4';
+  else if (mimeType.indexOf('wav')  !== -1) ext = '.wav';
+  else if (mimeType.indexOf('ogg')  !== -1) ext = '.ogg';
+  else if (mimeType.indexOf('flac') !== -1) ext = '.flac';
 
   const fileName   = '[' + dateStr + ']_' + company + '_' + topic + ext;
   const audioBytes = Utilities.base64Decode(audioData);
