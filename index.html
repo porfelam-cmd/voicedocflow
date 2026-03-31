@@ -786,6 +786,20 @@ function callGAS(audioData, mimeType) {
 }
 
 // ============================================================
+// MIMEタイプ正規化（Gemini対応形式に変換）
+// ============================================================
+function normalizeMimeType(rawType) {
+  var t = (rawType || '').toLowerCase().split(';')[0].trim();
+  if (t === 'audio/mpeg' || t === 'audio/mp3')           return 'audio/mp3';
+  if (t === 'audio/mp4'  || t === 'audio/x-m4a' ||
+      t === 'audio/m4a'  || t === 'video/mp4')            return 'audio/mp4';
+  if (t === 'audio/x-wav' || t === 'audio/wave')          return 'audio/wav';
+  if (t === 'video/webm' || t === 'audio/webm')           return 'audio/webm';
+  if (t === 'audio/ogg'  || t === 'video/ogg')            return 'audio/ogg';
+  return t || 'audio/mp3';
+}
+
+// ============================================================
 // ファイルアップロード処理
 // ============================================================
 document.getElementById('audio-file-input').addEventListener('change', function(e) {
@@ -793,7 +807,7 @@ document.getElementById('audio-file-input').addEventListener('change', function(
   if (!file) return;
   e.target.value = ''; // 同じファイルを再選択できるようにリセット
 
-  var mimeType = file.type || 'audio/mpeg';
+  var mimeType = normalizeMimeType(file.type);
 
   showPanel('process');
   setStep('upload', 'active');
